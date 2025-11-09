@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Juego de Canicas</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --color-bg: #f4f7f6;
+            --color-text: #333;
+            --color-primary: #007bff;
+            --color-secondary: #6c757d;
+            --color-accent: #28a745;
+            --color-danger: #dc3545;
+            --color-border: #dee2e6;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .panel {
+            background-color: #ffffff;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 25px;
+            flex-grow: 1;
+        }
+        #controls-panel {
+            flex-basis: 350px;
+        }
+        #output-panel {
+            flex-basis: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1, h2 {
+            color: var(--color-primary);
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        h2 {
+            color: var(--color-secondary);
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        .control-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .control-group input,
+        .control-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 5px;
+            box-sizing: border-box; /* Importante para que el padding no desborde */
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            background-color: var(--color-primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            flex-grow: 1;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button#run-single-btn {
+            background-color: var(--color-accent);
+        }
+        button#run-single-btn:hover {
+            background-color: #218838;
+        }
+        #charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        #single-game-output {
+            background-color: #fafafa;
+            border: 1px solid var(--color-border);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            max-height: 800px;
+            overflow-y: auto;
+            font-family: "Courier New", Courier, monospace;
+        }
+        .round {
+            border-bottom: 1px dashed var(--color-border);
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+        .round-header {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: var(--color-primary);
+        }
+        .round-elimination {
+            color: var(--color-danger);
+            font-weight: bold;
+        }
+        .player-list {
+            padding-left: 20px;
+            font-size: 0.9em;
+        }
+        .team {
+            background-color: #e6f7ff;
+            border: 1px solid #b3e0ff;
+            padding: 5px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .eliminated {
+            color: #a0a0a0;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Simulador del Juego de Canicas</h1>
+
+    <div class="container">
+        <div id="controls-panel" class="panel">
+            <h2>Parámetros de Simulación</h2>
+
+            <div class="control-group">
+                <label for="num-players">Jugadores iniciales</label>
+                <input type="number" id="num-players" value="50" min="10">
+            </div>
+
+            <div class="control-group">
+                <label for="num-colors">Número de colores de canicas</label>
+                <input type="number" id="num-colors" value="6" min="2">
+            </div>
+
+            <div class="control-group">
+                <label for="marbles-per-color">Canicas por color</label>
+                <input type="number" id="marbles-per-color" value="14" min="1">
+            </div>
+
+            <div class="control-group">
+                <label for="max-initial-marbles">Máx. canicas iniciales (0 a N)</label>
+                <input type="number" id="max-initial-marbles" value="3" min="1" max="10">
+            </div>
+
+            <div class="control-group">
+                <label for="num-dice">Número de dados</label>
+                <select id="num-dice">
+                    <option value="1" selected>1 (Objetivo 1-6)</option>
+                    <option value="2">2 (Objetivo 2-12)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="num-simulations">Número de simulaciones</label>
+                <input type="number" id="num-simulations" value="200" min="1" max="10000">
+            </div>
+
+            <div class="control-group">
+                <label for="strategy">Estrategia de agrupamiento</label>
+                <select id="strategy">
+                    <option value="maximize">Maximizar supervivientes (Voraz)</option>
+                    <option value="human">Humana (favorece 2s y 3s)</option>
+                    <option value="random">Aleatoria (sin optimizar)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="color-elimination">Criterio de eliminación de color</label>
+                <select id="color-elimination">
+                    <option value="random_remaining" selected>Aleatorio (de los restantes)</option>
+                    <option value="least_abundant">Menos abundante (de los restantes)</option>
+                    <option value="most_abundant">Más abundante (de los restantes)</option>
+                    <option value="random_maybe_none">Aleatorio (puede no eliminar)</option>
+                    <option value="never">No eliminar nunca</option>
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button id="run-sim-btn">Ejecutar Simulaciones</button>
+                <button id="run-single-btn">Ejecutar 1 Partida</button>
+            </div>
+        </div>
+
+        <div id="output-panel" class="panel">
+            <div id="simulation-output">
+                <h2>Resultados de la Simulación Múltiple</h2>
+                <div id="charts-container">
+                    <div>
+                        <h3>Histograma de Supervivientes Finales</h3>
+                        <canvas id="survivor-histogram"></canvas>
+                    </div>
+                    <div>
+                        <h3>Promedio de Jugadores por Ronda</h3>
+                        <canvas id="round-averages"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="single-game-output-container">
+                <h2>Detalle de Partida Única</h2>
+                <div id="single-game-output">
+                    <p>Haz clic en "Ejecutar 1 Partida" para ver el detalle ronda por ronda.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- VARIABLES GLOBALES PARA GRÁFICOS ---
+        let survivorHistogram = null;
+        let roundAveragesChart = null;
+
+        // --- CLASE PRINCIPAL DEL SIMULADOR ---
+        class MarbleGameSimulator {
+            constructor(settings) {
+                this.settings = settings;
+                this.players = [];
+                this.marbleStock = []; // Canicas disponibles al inicio
+                this.colors = [];
+                this.activePlayers = [];
+                this.round = 0;
+                this.logBuffer = []; // Para el log de la partida única
+            }
+
+            // --- INICIALIZACIÓN ---
+
+            /** Inicializa el juego, crea los colores, la reserva de canicas y los jugadores */
+            initializeGame() {
+                this.round = 0;
+                this.logBuffer = [];
+                this.players = [];
+                this.marbleStock = [];
+                this.colors = [];
+
+                // 1. Crear colores
+                for (let i = 0; i < this.settings.numColors; i++) {
+                    this.colors.push(`color_${i}`);
+                }
+
+                // 2. Crear reserva de canicas
+                this.colors.forEach(color => {
+                    for (let i = 0; i < this.settings.marblesPerColor; i++) {
+                        this.marbleStock.push(color);
+                    }
+                });
+                this.shuffleArray(this.marbleStock);
+
+                // 3. Crear jugadores
+                for (let i = 0; i < this.settings.numPlayers; i++) {
+                    const player = {
+                        id: i,
+                        marbles: {}, // { color_0: 2, color_1: 1 }
+                        totalMarbles: 0,
+                        isEliminated: false
+                    };
+                    
+                    // Inicializar contador para todos los colores
+                    this.colors.forEach(c => player.marbles[c] = 0);
+
+                    // Asignar canicas iniciales
+                    const numToTake = this.getRandomInt(0, this.settings.maxInitialMarbles);
+                    for (let j = 0; j < numToTake; j++) {
+                        if (this.marbleStock.length > 0) {
+                            const marbleColor = this.marbleStock.pop();
+                            player.marbles[marbleColor]++;
+                        }
+                    }
+                    player.totalMarbles = this.calculateTotalMarbles(player);
+                    this.players.push(player);
+                }
+                this.activePlayers = this.players.filter(p => !p.isEliminated);
+            }
+
+            // --- EJECUCIÓN DEL JUEGO ---
+
+            /** Ejecuta una partida completa y retorna las estadísticas finales */
+            runFullGame() {
+                this.initializeGame();
+                let roundStats = [];
+                let isGameOver = false;
+
+                while (!isGameOver) {
+                    this.round++;
+                    const roundResult = this.playRound();
+                    roundStats.push(roundResult.stats);
+                    
+                    // Comprobar condiciones de fin de juego
+                    isGameOver = this.checkEndConditions(roundResult);
+                    if (isGameOver) {
+                        return this.concludeGame(roundResult, roundStats);
+                    }
+
+                    // Actualizar jugadores activos para la siguiente ronda
+                    this.activePlayers = roundResult.survivors;
+                }
+            }
+
+            /** Ejecuta una sola ronda del juego */
+            playRound() {
+                // 1. Lanzar dado
+                const roll = this.rollDice();
+                
+                // 2. Formar equipos
+                const { survivors, eliminated, teams } = this.formTeams(roll);
+
+                // 3. Eliminar color
+                const { colorEliminated, marblesRemoved } = this.eliminateColor(survivors);
+
+                // 4. Recalcular total de canicas de supervivientes
+                survivors.forEach(p => {
+                    p.totalMarbles = this.calculateTotalMarbles(p);
+                });
+
+                const stats = {
+                    round: this.round,
+                    targetRoll: roll,
+                    survivors: survivors.length,
+                    eliminated: eliminated.length,
+                    colorEliminated: colorEliminated,
+                    marblesRemoved: marblesRemoved
+                };
+
+                return { survivors, eliminated, teams, stats };
+            }
+
+            /** Comprueba si el juego debe terminar */
+            checkEndConditions(roundResult) {
+                const { survivors, eliminated } = roundResult;
+                const activeColors = this.getActiveColors(survivors);
+
+                // Condición 1: No quedan supervivientes
+                if (survivors.length === 0) {
+                    // Caso especial: criterio "never" y se eliminan todos
+                    if (this.settings.colorElimination === 'never' && this.activePlayers.length > 0) {
+                        this.log(`--- JUEGO TERMINADO (Ronda ${this.round}) ---`);
+                        this.log(`Todos los jugadores (${this.activePlayers.length}) han sido eliminados en esta ronda.`);
+                        // Los ganadores son los de esta última ronda con más canicas
+                        const winners = this.getWinners(this.activePlayers);
+                        this.log(`🏆 GANADORES (los eliminados con más canicas): ${winners.map(p => `J${p.id} (${p.totalMarbles})`).join(', ')}`);
+                        return true;
+                    }
+                    // Caso normal: todos eliminados
+                    this.log(`--- JUEGO TERMINADO (Ronda ${this.round}) ---`);
+                    this.log("¡Todos los jugadores han sido eliminados! No hay ganadores.");
+                    return true;
+                }
+
+                // Condición 2: Queda 1 o menos colores (y no es "never")
+                if (this.settings.colorElimination !== 'never' && activeColors.length <= 1) {
+                    this.log(`--- ÚLTIMA RONDA (Ronda ${this.round}) ---`);
+                    this.log(`Queda 1 o 0 colores activos. Los ${survivors.length} supervivientes de esta ronda ganan.`);
+                    const winners = this.getWinners(survivors);
+                    this.log(`🏆 GANADORES: ${winners.map(p => `J${p.id} (${p.totalMarbles})`).join(', ')}`);
+                    return true;
+                }
+                
+                // Condición 3: Queda un número reducido de jugadores (ej. 1)
+                if (survivors.length === 1) {
+                     this.log(`--- JUEGO TERMINADO (Ronda ${this.round}) ---`);
+                     this.log(`Solo queda 1 superviviente.`);
+                     this.log(`🏆 GANADOR: J${survivors[0].id} (${survivors[0].totalMarbles} canicas)`);
+                     return true;
+                }
+
+                // Condición 4: El juego se estanca (ej. todos 0 canicas y no pueden ser eliminados)
+                const totalMarblesInPlay = survivors.reduce((sum, p) => sum + p.totalMarbles, 0);
+                if (totalMarblesInPlay === 0 && survivors.length > 0) {
+                    this.log(`--- JUEGO TERMINADO (Ronda ${this.round}) ---`);
+                    this.log(`Nadie tiene canicas, pero ${survivors.length} jugadores siguen en juego.`);
+                    this.log(`🏆 GANADORES (Empate): ${survivors.map(p => `J${p.id}`).join(', ')}`);
+                    return true;
+                }
+
+                return false;
+            }
+
+            /** Determina los ganadores y las estadísticas finales */
+            concludeGame(roundResult, roundStats) {
+                let finalSurvivors = [];
+                
+                if (this.settings.colorElimination === 'never' && roundResult.survivors.length === 0 && this.activePlayers.length > 0) {
+                    // Caso especial "never": ganan los últimos eliminados con más canicas
+                    finalSurvivors = this.getWinners(this.activePlayers);
+                } else {
+                    // Caso normal: ganan los supervivientes de la última ronda
+                    finalSurvivors = roundResult.survivors;
+                }
+
+                return {
+                    finalSurvivorCount: finalSurvivors.length,
+                    winners: finalSurvivors,
+                    totalRounds: this.round,
+                    roundStats: roundStats
+                };
+            }
+
+            // --- LÓGICA DE PARTIDA ÚNICA (LOGGING) ---
+
+            /** Ejecuta una partida única y la muestra en la UI */
+            runSingleGame() {
+                this.initializeGame();
+                const logElement = document.getElementById('single-game-output');
+                logElement.innerHTML = ''; // Limpiar log anterior
+                this.logBuffer = []; // Limpiar buffer
+
+                this.log(`Iniciando partida con ${this.settings.numPlayers} jugadores, ${this.settings.numColors} colores.`);
+                this.log(`Total de canicas en la reserva inicial: ${this.settings.numColors * this.settings.marblesPerColor}`);
+                
+                let isGameOver = false;
+                while (!isGameOver) {
+                    this.round++;
+                    this.log(`<div class="round"><div class="round-header">--- RONDA ${this.round} (Jugadores vivos: ${this.activePlayers.length}) ---</div>`);
+                    
+                    const roundResult = this.playRound();
+                    
+                    // Log de la ronda
+                    this.log(`🎲 Se lanza el dado: ¡Objetivo ${roundResult.stats.targetRoll}!`);
+                    this.log(`👥 Jugadores con >= 1 canica: ${this.activePlayers.filter(p => p.totalMarbles > 0).length}`);
+                    this.log(`--- Formación de Equipos ---`);
+                    roundResult.teams.forEach((team, i) => {
+                        const teamTotal = team.reduce((sum, p) => sum + p.totalMarbles, 0);
+                        this.log(`<div class="team">
+                            <strong>Equipo ${i+1} (Total: ${teamTotal}):</strong> 
+                            ${team.map(p => `J${p.id} (${p.totalMarbles})`).join(', ')}
+                        </div>`);
+                    });
+
+                    this.log(`--- Resultados de la Ronda ---`);
+                    this.log(`👍 Supervivientes: ${roundResult.survivors.length}`);
+                    
+                    // *** INICIO DE LA CORRECCIÓN ***
+                    
+                    this.log(`Siguen en juego: <span class="player-list">${roundResult.survivors.map(p => `J${p.id} (${p.totalMarbles} canicas)`).join(', ') || 'Nadie'}</span>`);
+                    this.log(`<strong class="round-elimination">❌ Eliminados: ${roundResult.eliminated.length}</strong>`);
+                    if (roundResult.eliminated.length > 0) {
+                        this.log(`Jugadores eliminados: <span class="player-list eliminated">${roundResult.eliminated.map(p => `J${p.id} (${p.totalMarbles} canicas)`).join(', ') || 'Nadie'}</span>`);
+                    }
+
+                    // Log de eliminación de color
+                    if (roundResult.stats.colorEliminated && roundResult.stats.colorEliminated !== '__NONE__') {
+                        this.log(`<strong class="round-elimination">🎨 Color eliminado: ${roundResult.stats.colorEliminated}</strong> (${roundResult.stats.marblesRemoved} canicas eliminadas de los supervivientes).`);
+                    } else if (this.settings.colorElimination === 'never') {
+                        this.log(`🎨 No se eliminan colores por la regla "No eliminar nunca".`);
+                    } else {
+                        this.log(`🎨 No se ha eliminado ningún color esta ronda.`);
+                    }
+                    
+                    // *** FIN DE LA CORRECCIÓN ***
+
+                    this.log(`</div>`); // Cierre de .round
+
+                    // Comprobar fin de juego
+                    isGameOver = this.checkEndConditions(roundResult);
+                    if (isGameOver) break;
+
+                    // Actualizar jugadores activos
+                    this.activePlayers = roundResult.survivors;
+
+                    // Salvaguarda anti-bucle infinito
+                    if (this.round > (this.settings.numColors * 5) && this.settings.colorElimination === 'never') {
+                         this.log(`--- JUEGO TERMINADO (Ronda ${this.round}) ---`);
+                         this.log(`Se detiene el juego por alcanzar un número excesivo de rondas.`);
+                         const winners = this.getWinners(this.activePlayers);
+                         this.log(`🏆 GANADORES (los supervivientes con más canicas): ${winners.map(p => `J${p.id} (${p.totalMarbles})`).join(', ')}`);
+                         isGameOver = true;
+                    } else if (this.round > 100) {
+                         this.log("Juego detenido por superar 100 rondas (salvaguarda).");
+                         isGameOver = true;
+                    }
+                }
+                
+                logElement.innerHTML = this.logBuffer.join('\n');
+            }
+
+            // --- LÓGICA CENTRAL DEL JUEGO ---
+
+            /** Lanza el/los dado/s */
+            rollDice() {
+                let roll = this.getRandomInt(1, 6);
+                if (this.settings.numDice === 2) {
+                    roll += this.getRandomInt(1, 6);
+                }
+                return roll;
+            }
+
+            /**
+             * Lógica de formación de equipos.
+             * Esta es la parte más compleja. Usamos una heurística voraz.
+             * "Trading" se abstrae: asumimos que si un equipo tiene los jugadores
+             * y las canicas, pueden formarlo.
+             * La estrategia "Maximize" intenta salvar al máximo de gente posible
+             * encontrando primero las combinaciones más difíciles (equipos grandes).
+             */
+            formTeams(targetRoll) {
+                const survivors = [];
+                const teams = [];
+                // Solo jugadores con canicas pueden formar equipos
+                let playerPool = this.activePlayers.filter(p => p.totalMarbles > 0);
+                const eliminated = this.activePlayers.filter(p => p.totalMarbles === 0);
+                
+                // Definir el orden de búsqueda de tamaño de equipo según la estrategia
+                let teamSizesToTry;
+                switch (this.settings.strategy) {
+                    case 'human': // Favorece 2s y 3s
+                        teamSizesToTry = [2, 3, 1, 4, 5, 6];
+                        break;
+                    case 'random':
+                        teamSizesToTry = this.shuffleArray([1, 2, 3, 4, 5, 6]);
+                        break;
+                    case 'maximize': // Voraz: intenta los grupos más grandes primero
+                    default:
+                        teamSizesToTry = [6, 5, 4, 3, 2, 1];
+                        break;
+                }
+
+                for (const teamSize of teamSizesToTry) {
+                    let teamFound = true;
+                    while (teamFound) {
+                        // findCombinations busca UN equipo que cumpla la condición
+                        const foundTeam = this.findCombination(playerPool, targetRoll, teamSize);
+                        
+                        if (foundTeam) {
+                            teams.push(foundTeam);
+                            foundTeam.forEach(player => {
+                                survivors.push(player);
+                                // Eliminar jugador del pool para no usarlo de nuevo
+                                playerPool = playerPool.filter(p => p.id !== player.id);
+                            });
+                            teamFound = true;
+                        } else {
+                            teamFound = false; // No se encontraron más equipos de este tamaño
+                        }
+                    }
+                }
+
+                // Los jugadores del pool que no formaron equipo son eliminados
+                eliminated.push(...playerPool);
+
+                return { survivors, eliminated, teams };
+            }
+
+            /**
+             * Función auxiliar recursiva para encontrar UNA combinación
+             * de 'teamSize' jugadores en 'playerPool' cuya suma de canicas
+             * sea 'targetRoll'.
+             */
+            findCombination(playerPool, target, teamSize) {
+                const pool = [...playerPool]; // Copia para trabajar
+                
+                function find(startIndex, currentTeam, currentSum) {
+                    // Éxito: suma y tamaño correctos
+                    if (currentSum === target && currentTeam.length === teamSize) {
+                        return currentTeam;
+                    }
+                    // Fracaso: nos pasamos de suma o de tamaño
+                    if (currentSum > target || currentTeam.length === teamSize) {
+                        return null;
+                    }
+                    
+                    for (let i = startIndex; i < pool.length; i++) {
+                        const player = pool[i];
+                        currentTeam.push(player);
+                        const result = find(i + 1, currentTeam, currentSum + player.totalMarbles);
+                        if (result) return result; // Encontrado
+                        currentTeam.pop(); // Backtrack
+                    }
+                    
+                    return null; // No se encontró
+                }
+                
+                // Caso especial: si teamSize es 1, la búsqueda es mucho más simple
+                if (teamSize === 1) {
+                    const foundIndex = pool.findIndex(p => p.totalMarbles === target);
+                    if (foundIndex !== -1) {
+                        return [pool[foundIndex]];
+                    }
+                    return null;
+                }
+                
+                // Empezar búsqueda recursiva para teamSize > 1
+                return find(0, [], 0);
+            }
+
+
+            /** Lógica de eliminación de color */
+            eliminateColor(survivors) {
+                const criteria = this.settings.colorElimination;
+                if (criteria === 'never' || survivors.length === 0) {
+                    return { colorEliminated: null, marblesRemoved: 0 };
+                }
+
+                const activeColors = this.getActiveColors(survivors);
+                if (activeColors.length === 0) {
+                    return { colorEliminated: null, marblesRemoved: 0 };
+                }
+
+                let colorToEliminate = null;
+
+                switch (criteria) {
+                    case 'random_remaining':
+                        colorToEliminate = activeColors[this.getRandomInt(0, activeColors.length - 1)];
+                        break;
+                    
+                    case 'random_maybe_none':
+                        const options = [...activeColors, '__NONE__'];
+                        colorToEliminate = options[this.getRandomInt(0, options.length - 1)];
+                        break;
+
+                    case 'least_abundant':
+                    case 'most_abundant':
+                        const counts = this.getColorCounts(survivors);
+                        let sortedCounts = Object.entries(counts).sort(([,a], [,b]) => a - b);
+                        if (criteria === 'most_abundant') {
+                            sortedCounts.reverse();
+                        }
+                        colorToEliminate = sortedCounts[0] ? sortedCounts[0][0] : null; // [0][0] es el nombre del color
+                        break;
+                }
+
+                if (!colorToEliminate || colorToEliminate === '__NONE__') {
+                    return { colorEliminated: '__NONE__', marblesRemoved: 0 };
+                }
+
+                // Eliminar el color de los supervivientes
+                let marblesRemoved = 0;
+                survivors.forEach(player => {
+                    if (player.marbles[colorToEliminate]) {
+                        marblesRemoved += player.marbles[colorToEliminate];
+                        player.marbles[colorToEliminate] = 0;
+                    }
+                });
+
+                return { colorToEliminate, marblesRemoved };
+            }
+
+            // --- FUNCIONES AUXILIARES ---
+
+            log(message) { this.logBuffer.push(message); }
+            calculateTotalMarbles(player) {
+                return Object.values(player.marbles).reduce((sum, count) => sum + count, 0);
+            }
+            getRandomInt(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+            shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            }
+            /** Obtiene los colores que siguen en juego (en manos de supervivientes) */
+            getActiveColors(players) {
+                const colorSet = new Set();
+                players.forEach(player => {
+                    this.colors.forEach(color => {
+                        if (player.marbles[color] > 0) {
+                            colorSet.add(color);
+                        }
+                    });
+                });
+                return Array.from(colorSet);
+            }
+            /** Cuenta cuántas canicas de cada color hay entre un grupo de jugadores */
+            getColorCounts(players) {
+                const counts = {};
+                this.colors.forEach(c => counts[c] = 0);
+                players.forEach(player => {
+                    this.colors.forEach(color => {
+                        counts[color] += player.marbles[color];
+                    });
+                });
+                // Filtramos solo los colores que existen
+                return Object.fromEntries(Object.entries(counts).filter(([,val]) => val > 0));
+            }
+            /** Determina los ganadores (los que tienen más canicas) de un grupo */
+            getWinners(playerGroup) {
+                if (playerGroup.length === 0) return [];
+                const maxMarbles = Math.max(...playerGroup.map(p => p.totalMarbles));
+                return playerGroup.filter(p => p.totalMarbles === maxMarbles);
+            }
+
+        } // --- FIN DE LA CLASE MarbleGameSimulator ---
+
+
+        // --- MANEJADORES DE EVENTOS DE LA UI ---
+
+        document.getElementById('run-sim-btn').addEventListener('click', runMultipleSimulations);
+        document.getElementById('run-single-btn').addEventListener('click', runSingleGame);
+
+        /** Recoge los settings de la UI */
+        function getSettings() {
+            return {
+                numPlayers: parseInt(document.getElementById('num-players').value),
+                numColors: parseInt(document.getElementById('num-colors').value),
+                marblesPerColor: parseInt(document.getElementById('marbles-per-color').value),
+                maxInitialMarbles: parseInt(document.getElementById('max-initial-marbles').value),
+                numDice: parseInt(document.getElementById('num-dice').value),
+                numSimulations: parseInt(document.getElementById('num-simulations').value),
+                strategy: document.getElementById('strategy').value,
+                colorElimination: document.getElementById('color-elimination').value
+            };
+        }
+
+        /** Ejecuta una única partida y la muestra */
+        function runSingleGame() {
+            console.log("Ejecutando partida única...");
+            const settings = getSettings();
+            const simulator = new MarbleGameSimulator(settings);
+            simulator.runSingleGame();
+        }
+
+        /** Ejecuta múltiples simulaciones y genera los gráficos */
+        function runMultipleSimulations() {
+            console.log("Ejecutando simulaciones múltiples...");
+            const settings = getSettings();
+            const numSims = settings.numSimulations;
+            
+            let allResults = [];
+            let totalRoundStats = {}; // { 1: { survivors: 0, eliminated: 0 }, 2: ... }
+            let maxRounds = 0;
+
+            for (let i = 0; i < numSims; i++) {
+                const simulator = new MarbleGameSimulator(settings);
+                const result = simulator.runFullGame();
+                allResults.push(result);
+
+                // Acumular estadísticas por ronda
+                result.roundStats.forEach(stat => {
+                    if (!totalRoundStats[stat.round]) {
+                        totalRoundStats[stat.round] = { survivors: 0, eliminated: 0 };
+                    }
+                    totalRoundStats[stat.round].survivors += stat.survivors;
+                    totalRoundStats[stat.round].eliminated += stat.eliminated;
+                });
+                if (result.totalRounds > maxRounds) maxRounds = result.totalRounds;
+            }
+
+            // Procesar datos para gráficos
+            const finalSurvivorCounts = allResults.map(r => r.finalSurvivorCount);
+            
+            // 1. Datos para Histograma
+            const histogramData = {};
+            const maxSurvivors = Math.max(...finalSurvivorCounts, settings.numPlayers);
+            for(let i=0; i <= maxSurvivors; i++) { histogramData[i] = 0; }
+            finalSurvivorCounts.forEach(count => {
+                histogramData[count]++;
+            });
+
+            // 2. Datos para Promedios por Ronda
+            const roundLabels = [];
+            const avgSurvivorsPerRound = [];
+            const avgEliminatedPerRound = [];
+            
+            for (let i = 1; i <= maxRounds; i++) {
+                if (totalRoundStats[i]) {
+                    roundLabels.push(`Ronda ${i}`);
+                    avgSurvivorsPerRound.push(totalRoundStats[i].survivors / numSims);
+                    avgEliminatedPerRound.push(totalRoundStats[i].eliminated / numSims);
+                }
+            }
+
+            // Dibujar gráficos
+            drawHistogram(Object.keys(histogramData), Object.values(histogramData));
+            drawRoundAverages(roundLabels, avgSurvivorsPerRound, avgEliminatedPerRound);
+        }
+
+        // --- FUNCIONES DE DIBUJO DE GRÁFICOS (Chart.js) ---
+
+        function drawHistogram(labels, data) {
+            const ctx = document.getElementById('survivor-histogram').getContext('2d');
+            if (survivorHistogram) {
+                survivorHistogram.destroy();
+            }
+            survivorHistogram = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Nº de Partidas',
+                        data: data,
+                        backgroundColor: 'rgba(0, 123, 255, 0.7)',
+                        borderColor: 'rgba(0, 123, 255, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Nº de Supervivientes Finales'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Frecuencia (de ' + getSettings().numSimulations + ' partidas)'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function drawRoundAverages(labels, survivorsData, eliminatedData) {
+            const ctx = document.getElementById('round-averages').getContext('2d');
+            if (roundAveragesChart) {
+                roundAveragesChart.destroy();
+            }
+            roundAveragesChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Promedio Supervivientes',
+                            data: survivorsData,
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                            fill: true,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Promedio Eliminados',
+                            data: eliminatedData,
+                            borderColor: 'rgba(220, 53, 69, 1)',
+                            backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                            fill: true,
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Ronda'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Promedio de Jugadores'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+        }
+
+    </script>
+
+</body>
+</html>
