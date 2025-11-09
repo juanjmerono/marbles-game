@@ -2,6 +2,8 @@
 
 Pequeña simulación de un juego cooperativo con canicas.
 
+[Probar simulación](https://juanjmerono.github.io/marbles-game/)
+
 ## Instrucciones del juego
 
 ### Preparación
