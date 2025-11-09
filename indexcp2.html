@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simulación del juego de canicas</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+</script>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --muted:#9fb0c2; --accent:#2f81f7; --danger:#f85149;
+    --ok:#3fb950; --warn:#d29922;
+  }
+  html,body{height:100%;}
+  body{margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--ink);}
+  h1,h2,h3{margin:0.6rem 0;}
+  .wrap{max-width:1200px; margin:0 auto; padding:16px;}
+  .grid{display:grid; gap:12px;}
+  .cols-3{grid-template-columns:repeat(3,1fr);}
+  .cols-2{grid-template-columns:repeat(2,1fr);}
+  .panel{background:var(--panel); border:1px solid #242b36; border-radius:10px; padding:14px;}
+  label{display:block; font-size:.9rem; color:var(--muted); margin-bottom:6px;}
+  input[type=number], select{
+    width:100%; box-sizing:border-box; background:#0b0e13; color:var(--ink);
+    border:1px solid #2b3340; border-radius:8px; padding:8px 10px; outline:none;
+  }
+  input[type=number]:focus, select:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,129,247,.2);}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  button{
+    background:var(--accent); color:white; border:0; border-radius:8px; padding:10px 14px;
+    font-weight:600; cursor:pointer;
+  }
+  button.secondary{background:#30363d;}
+  button.danger{background:var(--danger);}
+  button.ghost{background:transparent; border:1px dashed #2b3340;}
+  .hint{font-size:.85rem; color:var(--muted);}
+  canvas{background:#0b0e13; border-radius:8px; border:1px solid #2b3340;}
+  .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-weight:600; font-size:.8rem;}
+  .badge.ok{background:rgba(63,185,80,.15); color:var(--ok); border:1px solid rgba(63,185,80,.35);}
+  .badge.warn{background:rgba(210,153,34,.15); color:var(--warn); border:1px solid rgba(210,153,34,.35);}
+  .badge.danger{background:rgba(248,81,73,.15); color:var(--danger); border:1px solid rgba(248,81,73,.35);}
+  details{border-top:1px dashed #2b3340; padding-top:8px; margin-top:8px;}
+  pre, code{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;}
+  .log{max-height:480px; overflow:auto; background:#0b0e13; border:1px solid #2b3340; border-radius:8px; padding:12px; line-height:1.35; white-space:pre-wrap;}
+  .pill{display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:middle;}
+  .table{border-collapse: collapse; width:100%; font-size:.9rem;}
+  .table th,.table td{border-bottom:1px solid #2b3340; padding:6px 8px; text-align:left; vertical-align:top;}
+  .kpis{display:flex; gap:10px; flex-wrap:wrap;}
+  .kpi{background:#0b0e13; border:1px solid #2b3340; border-radius:10px; padding:10px 12px;}
+  .kpi h4{margin:0; font-size:.9rem; color:var(--muted);}
+  .kpi .v{font-size:1.4rem; font-weight:700;}
+  .footer{color:var(--muted); font-size:.85rem; margin-top:12px;}
+  /* Stepper */
+  .step-controls{display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
+  .step-ind{font-weight:700;}
+  .ronda-card{background:#0b0e13; border:1px solid #2b3340; border-radius:10px; padding:10px;}
+  .small{font-size:.9rem; color:var(--muted);}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Simulación del juego de canicas</h1>
+  <p class="hint">Ajusta parámetros, ejecuta <b>simulaciones</b> o una <b>partida individual</b> con trazas completas y modo <b>ronda a ronda</b>.</p>
+
+  <div class="grid cols-3">
+    <div class="panel">
+      <h2>Parámetros</h2>
+      <div class="grid cols-2">
+        <div>
+          <label>Nº jugadores iniciales</label>
+          <input id="inpJugadores" type="number" min="1" max="5000" value="80" />
+        </div>
+        <div>
+          <label>Nº colores de canicas</label>
+          <input id="inpColores" type="number" min="1" max="24" value="6" />
+        </div>
+        <div>
+          <label>Canicas por color (total en cesto)</label>
+          <input id="inpCanicasPorColor" type="number" min="1" max="1000" value="14" />
+        </div>
+        <div>
+          <label>Máximo canicas iniciales por jugador (0-3)</label>
+          <input id="inpMaxInicio" type="number" min="0" max="3" value="3" />
+        </div>
+        <div>
+          <label>Nº simulaciones</label>
+          <input id="inpSimulaciones" type="number" min="1" max="10000" value="200" />
+        </div>
+        <div>
+          <label>Estrategia</label>
+          <select id="selEstrategia">
+            <option value="max">Maximizar supervivientes</option>
+            <option value="ale">Aleatoria (sin optimizar)</option>
+            <option value="greedy">Greedy (humana)</option>
+            <option value="k1">Equipos de 1</option>
+            <option value="k2">Equipos de 2</option>
+            <option value="k3">Equipos de 3</option>
+            <option value="k4">Equipos de 4</option>
+            <option value="k5">Equipos de 5</option>
+            <option value="k6">Equipos de 6</option>
+          </select>
+        </div>
+        <div>
+          <label>Eliminación de color al final de la ronda</label>
+          <select id="selColor">
+            <option value="rand">Aleatorio entre presentes</option>
+            <option value="min">Eliminar el menos abundante</option>
+            <option value="max">Eliminar el más abundante</option>
+            <option value="none">No eliminar ningún color</option>
+          </select>
+        </div>
+        <div>
+          <label>Semilla aleatoria (opcional)</label>
+          <input id="inpSeed" type="number" placeholder="(vacío = aleatorio)" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btnSimular">Ejecutar simulaciones</button>
+        <button id="btnPartida" class="secondary">Jugar 1 partida (detallada)</button>
+        <button id="btnReset" class="danger">Limpiar resultados</button>
+      </div>
+      <p class="hint">
+        Estrategia <b>Greedy (humana)</b>: los jugadores <b>no ceden</b> canicas que ya poseen; sólo “buscan” las que <b>faltan</b> en los eliminados de la ronda.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>Histograma de supervivientes</h2>
+      <canvas id="chartHist" height="320"></canvas>
+      <div class="kpis" id="kpisHist"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Promedio eliminados por ronda</h2>
+      <canvas id="chartAvgElim" height="320"></canvas>
+      <div class="kpis" id="kpisElim"></div>
+    </div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:12px;">
+    <div class="panel">
+      <h2>Partida individual (traza)</h2>
+      <div class="step-controls">
+        <button id="btnPrev" class="ghost">⟵ Anterior</button>
+        <button id="btnNext">Siguiente ⟶</button>
+        <button id="btnAuto" class="secondary">Autoplay ▶</button>
+        <span class="step-ind" id="lblPaso">Ronda –</span>
+        <span class="small" id="lblEstado"></span>
+      </div>
+      <div id="rondaView" class="ronda-card">
+        <div class="small">Pulsa “Jugar 1 partida (detallada)” para generar la secuencia de rondas y usa los controles para navegar.</div>
+      </div>
+
+      <details style="margin-top:10px;">
+        <summary>Log completo (texto)</summary>
+        <div class="log" id="log"></div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Leyenda de colores</h2>
+      <table class="table" id="tablaColores"></table>
+      <details>
+        <summary>Notas de diseño</summary>
+        <ul>
+          <li><b>Intercambios</b>: libres pero conservando totales y colores globales.</li>
+          <li>Un jugador puede terminar una ronda con 0 canicas y seguir vivo; en siguientes rondas puede recibir canicas.</li>
+          <li><b>No eliminar color</b>: el juego termina cuando una ronda no forma ningún equipo. Se eliminan todos y ganan los que <b>más canicas</b> tenían en esa última ronda.</li>
+          <li>Con eliminación de color, el juego termina cuando (tras una ronda) las canicas de supervivientes quedan de un único color (o ninguna).</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =================== utilidades =================== */
+function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
+let RNG = Math.random;
+function setSeed(seed){ RNG = Number.isFinite(seed)? mulberry32(seed>>>0) : Math.random; }
+function randInt(a,b){ return Math.floor(RNG()*(b-a+1))+a; }
+function choice(arr){ return arr[Math.floor(RNG()*arr.length)]; }
+function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+/* =================== colores =================== */
+function palette(n){
+  const base = [
+    "#7ee787","#2f81f7","#f778ba","#ffa657","#d2a8ff","#79c0ff",
+    "#ff7b72","#3fb950","#c297ff","#9bdaff","#ffd28e","#ff9da4",
+    "#66e3b1","#f2cc60","#b081f0","#4fd2ff","#ffbdad","#b2f59c"
+  ];
+  const out=[]; for(let i=0;i<n;i++) out.push(base[i%base.length]); return out;
+}
+
+/* =================== modelo =================== */
+function crearJugadores(nJug, nCol, maxInicio, canicasPorColor){
+  const pool = Array(nCol).fill(canicasPorColor);
+  let totalPool = sum(pool);
+  const jugadores=[];
+  for(let i=0;i<nJug;i++){
+    const j = { id:i+1, colores:Array(nCol).fill(0) };
+    const quiere = randInt(0, Math.max(0, Math.min(3, maxInicio)));
+    for(let t=0;t<quiere && totalPool>0;t++){
+      const idxs = pool.map((v,ix)=>({v,ix})).filter(x=>x.v>0).map(x=>x.ix);
+      const c = choice(idxs);
+      pool[c]--; totalPool--;
+      j.colores[c]++;
+    }
+    jugadores.push(j);
+  }
+  return jugadores;
+}
+const totalCanicasJugador = j => sum(j.colores);
+const totalCanicasJugadores = arr => arr.reduce((acc,j)=>acc+totalCanicasJugador(j),0);
+function conteoColores(jugadores){
+  if(jugadores.length===0) return [];
+  const nCol=jugadores[0].colores.length;
+  const cnt=Array(nCol).fill(0);
+  for(const j of jugadores){ for(let c=0;c<nCol;c++) cnt[c]+=j.colores[c]; }
+  return cnt;
+}
+const hayUnSoloColor = cnt => cnt.filter(x=>x>0).length<=1;
+
+/* Distribuye colores desde un pool global entre un mapa {idJugador: objetivoTotal} */
+function asignarColoresSegunObjetivo(objs, colorPool, idsOrden){
+  const res = new Map();
+  for(const id of idsOrden){
+    const objetivo = objs.get(id) || 0;
+    const colores = Array(colorPool.length).fill(0);
+    let rest = objetivo;
+    while(rest>0){
+      const presentes = colorPool.map((v,ix)=>({v,ix})).filter(x=>x.v>0);
+      if(presentes.length===0){ break; }
+      const c = choice(presentes).ix;
+      colores[c]++; colorPool[c]--; rest--;
+    }
+    res.set(id, colores);
+  }
+  return res;
+}
+
+/* Selección de equipos (devuelve tamaños) según estrategia y restricciones */
+function seleccionarEquipos(estrategia, D, N, T){
+  const L = Math.min(6,D);
+  const maxTeamsByMarbles = Math.floor(T / D);
+  if(maxTeamsByMarbles<=0 || N<=0 || L<=0) return [];
+
+  if(estrategia==="max"){
+    const sizes=[];
+    let remainTeams = maxTeamsByMarbles;
+    let remainPlayers = N;
+    while(remainTeams>0 && remainPlayers>=L){
+      sizes.push(L); remainTeams--; remainPlayers-=L;
+    }
+    if(remainTeams>0 && remainPlayers>0){ sizes.push(Math.min(remainPlayers, L)); }
+    return sizes;
+  }
+  if(estrategia.startsWith("k")){
+    const K = parseInt(estrategia.slice(1),10);
+    if(K>L) return [];
+    const m = Math.min(maxTeamsByMarbles, Math.floor(N/K));
+    return Array(m).fill(K);
+  }
+  // aleatoria o greedy (mismo número de equipos potenciales)
+  const sizes=[];
+  let remainTeams = randInt(0, maxTeamsByMarbles);
+  let remainPlayers = N;
+  while(remainTeams>0 && remainPlayers>0){
+    const k = randInt(1, L);
+    if(k<=remainPlayers){ sizes.push(k); remainTeams--; remainPlayers-=k; } else break;
+  }
+  return sizes;
+}
+
+/* Genera aportaciones (enteros >=1) que suman D para un equipo de k miembros */
+function aportaciones(D,k){
+  const arr = Array(k).fill(1);
+  let rest = D - k;
+  while(rest>0){ const i = randInt(0,k-1); arr[i]++; rest--; }
+  return arr;
+}
+
+/* Elige color a eliminar según criterio; cnt es el conteo en supervivientes */
+function elegirColorEliminar(cnt, criterio){
+  const presentes = cnt.map((v,ix)=>({v,ix})).filter(x=>x.v>0);
+  if(presentes.length===0) return -1;
+  if(criterio==="none") return -1;
+  if(criterio==="rand") return choice(presentes).ix;
+  if(criterio==="min"){ return presentes.reduce((m,x)=> x.v<m.v?x:m).ix; }
+  if(criterio==="max"){ return presentes.reduce((M,x)=> x.v>M.v?x:M).ix; }
+  return -1;
+}
+
+/* Tomar 'need' canicas aleatorias desde el conjunto de jugadores eliminados (mutando sus colores) */
+function tomarDesdeEliminados(elim, nCol, need){
+  const taken = Array(nCol).fill(0);
+  let rest = need;
+  while(rest>0){
+    const candidatos = elim.filter(e=> totalCanicasJugador(e)>0 );
+    if(candidatos.length===0) break;
+    const p = choice(candidatos);
+    const cols = p.colores.map((v,ix)=>({v,ix})).filter(x=>x.v>0);
+    const c = choice(cols).ix;
+    p.colores[c]--; taken[c]++; rest--;
+  }
+  return taken;
+}
+
+/* =================== simulación de una partida (agregada y trazas) =================== */
+function simularPartida(params, modoDetalle=false){
+  const {
+    nJug, nCol, maxInicio, canicasPorColor, estrategia, criterioColor
+  } = params;
+
+  let jugadores = crearJugadores(nJug, nCol, maxInicio, canicasPorColor);
+  const log = [];
+  const eliminadosPorRonda = [];
+  let ronda = 0;
+  let winners = [];
+  let fin = false;
+
+  while(!fin){
+    ronda++;
+    const N = jugadores.length;
+    const T = totalCanicasJugadores(jugadores);
+    const D = randInt(1,6);
+    const sizes = seleccionarEquipos(estrategia, D, N, T);
+
+    const equipos = [];
+    const indices = [...Array(N).keys()];
+    for(let i=indices.length-1;i>0;i--){ const j = randInt(0,i); [indices[i],indices[j]]=[indices[j],indices[i]]; }
+
+    const S = sum(sizes);
+    const idsSuperv = new Set(indices.slice(0, S).map(ix=>jugadores[ix].id));
+    const sup = jugadores.filter(j=>idsSuperv.has(j.id)).map(j=>clone(j));
+    const elim = jugadores.filter(j=>!idsSuperv.has(j.id)).map(j=>clone(j));
+
+    // Generar aportaciones
+    let pos=0;
+    const aportesPorJugador = new Map();
+    for(const k of sizes){
+      const ap = aportaciones(D,k);
+      const miembros=[];
+      for(let t=0;t<k;t++){
+        const j = jugadores[indices[pos++]];
+        aportesPorJugador.set(j.id, ap[t]);
+        miembros.push({id:j.id, aporta:ap[t]});
+      }
+      equipos.push({ dado:D, miembros, suma:D });
+    }
+
+    if(equipos.length===0){
+      if(criterioColor==="none"){
+        if(jugadores.length>0){
+          const totales = jugadores.map(j=>({id:j.id, t:totalCanicasJugador(j)}));
+          const maxT = Math.max(...totales.map(x=>x.t));
+          winners = totales.filter(x=>x.t===maxT).map(x=>x.id);
+        }else{ winners=[]; }
+      }else{
+        winners=[];
+      }
+      eliminadosPorRonda.push(N);
+      log.push(`Ronda ${ronda} — Dado: ${D} → No se formó ningún equipo. Todos eliminados.`);
+      break;
+    }
+
+    if(estrategia==="greedy"){
+      // Los supervivientes conservan lo que tienen; si les falta para su aporte, lo toman de eliminados.
+      for(const sj of sup){
+        const aporte = aportesPorJugador.get(sj.id) || 1;
+        const tiene = totalCanicasJugador(sj);
+        const faltan = Math.max(0, aporte - tiene);
+        if(faltan>0){
+          const extra = tomarDesdeEliminados(elim, nCol, faltan);
+          for(let c=0;c<nCol;c++) sj.colores[c]+=extra[c];
+        }
+      }
+      // Log detallado (estado de eliminados tras ceder lo necesario)
+      if(modoDetalle){
+        let s = [];
+        s.push(`\n— Ronda ${ronda} | Dado: ${D}`);
+        s.push(`  Equipos formados (${equipos.length}):`);
+        equipos.forEach((eq,idx)=>{
+          const miembros = eq.miembros.map(m=>`J${m.id}=${m.aporta}`).join(", ");
+          s.push(`   · E${idx+1} (suma=${eq.suma}): ${miembros}`);
+        });
+        if(elim.length>0){
+          s.push(`  Eliminados (${elim.length}) antes de desaparecer (tras ceder faltantes):`);
+          for(const e of elim){
+            const tot = totalCanicasJugador(e);
+            const desCols = e.colores.map((v,i)=> v>0? `C${i+1}:${v}`:null).filter(Boolean).join(" ");
+            s.push(`   · J${e.id} — total=${tot}${desCols? " ["+desCols+"]":""}`);
+          }
+        }else{
+          s.push(`  Eliminados: 0`);
+        }
+        log.push(s.join("\n"));
+      }
+
+      eliminadosPorRonda.push(elim.length);
+      // Eliminar a los no supervivientes
+      jugadores = sup;
+
+      // Eliminar color si aplica
+      if(params.criterioColor!=="none"){
+        const cntSup = conteoColores(jugadores);
+        const colorElim = elegirColorEliminar(cntSup, params.criterioColor);
+        let totalQuitado = 0;
+        if(colorElim>=0){
+          for(const j of jugadores){ totalQuitado += j.colores[colorElim]; j.colores[colorElim]=0; }
+        }
+        if(modoDetalle){
+          const msg = (colorElim>=0)
+            ? `  Color eliminado: C${colorElim+1} (quitadas ${totalQuitado} canicas)`
+            : `  No había colores presentes para eliminar.`;
+          log.push(msg);
+        }
+        const trasCnt = conteoColores(jugadores);
+        if(hayUnSoloColor(trasCnt)){
+          winners = jugadores.map(j=>j.id);
+          fin = true;
+          if(modoDetalle){ log.push(`  → Fin: las canicas restantes son de un único color (o ninguna).`); }
+          break;
+        }
+      }
+      if(jugadores.length===0){ winners=[]; fin=true; if(modoDetalle){ log.push(`  → Fin: no quedan jugadores.`);} break; }
+      continue; // siguiente ronda
+    }
+
+    // Estrategias no-greedy (max, ale, k*)
+    const sumaAportes = Array.from(aportesPorJugador.values()).reduce((a,b)=>a+b,0);
+    let remanente = Math.max(0, totalCanicasJugadores(jugadores) - sumaAportes);
+    let pool = conteoColores(jugadores);
+
+    const objetivo = new Map();
+    for(const j of sup){ objetivo.set(j.id, Math.max(1, aportesPorJugador.get(j.id) || 1)); }
+    for(const j of elim){ objetivo.set(j.id, 0); }
+
+    if(remanente>0){
+      if(params.estrategia==="ale"){
+        const vivos = sup.map(j=>j.id);
+        const noVivos = elim.map(j=>j.id);
+        while(remanente>0){
+          const targetPool = (RNG()<0.8 || noVivos.length===0) ? vivos : noVivos;
+          if(targetPool.length===0) break;
+          const id = choice(targetPool);
+          objetivo.set(id, (objetivo.get(id)||0)+1);
+          remanente--;
+        }
+      }else{
+        const vivos = sup.map(j=>j.id);
+        let i=0;
+        while(remanente>0 && vivos.length>0){
+          const id = vivos[i%vivos.length];
+          objetivo.set(id, (objetivo.get(id)||0)+1);
+          remanente--; i++;
+        }
+      }
+    }
+
+    const ordenIds = jugadores.map(j=>j.id);
+    const asignacion = asignarColoresSegunObjetivo(objetivo, pool, ordenIds);
+
+    if(modoDetalle){
+      let s = [];
+      s.push(`\n— Ronda ${ronda} | Dado: ${D}`);
+      s.push(`  Equipos formados (${equipos.length}):`);
+      equipos.forEach((eq,idx)=>{
+        const miembros = eq.miembros.map(m=>`J${m.id}=${m.aporta}`).join(", ");
+        s.push(`   · E${idx+1} (suma=${eq.suma}): ${miembros}`);
+      });
+      if(elim.length>0){
+        s.push(`  Eliminados (${elim.length}):`);
+        for(const e of elim){
+          const tot = objetivo.get(e.id)||0;
+          const cols = asignacion.get(e.id)||Array(params.nCol).fill(0);
+          const desCols = cols.map((v,i)=> v>0? `C${i+1}:${v}`:null).filter(Boolean).join(" ");
+          s.push(`   · J${e.id} — total=${tot}${desCols? " ["+desCols+"]":""}`);
+        }
+      }else s.push(`  Eliminados: 0`);
+      log.push(s.join("\n"));
+    }
+
+    eliminadosPorRonda.push(elim.length);
+    jugadores = jugadores.map(j=>{
+      if(idsSuperv.has(j.id)){ const n = clone(j); n.colores = asignacion.get(j.id)||Array(params.nCol).fill(0); return n; }
+      return null;
+    }).filter(Boolean);
+
+    if(params.criterioColor!=="none"){
+      const cntSup = conteoColores(jugadores);
+      const colorElim = elegirColorEliminar(cntSup, params.criterioColor);
+      let totalQuitado = 0;
+      if(colorElim>=0){ for(const j of jugadores){ totalQuitado += j.colores[colorElim]; j.colores[colorElim]=0; } }
+      if(modoDetalle){
+        const msg = (colorElim>=0)
+          ? `  Color eliminado: C${colorElim+1} (quitadas ${totalQuitado} canicas)`
+          : `  No había colores presentes para eliminar.`;
+        log.push(msg);
+      }
+      const trasCnt = conteoColores(jugadores);
+      if(hayUnSoloColor(trasCnt)){
+        winners = jugadores.map(j=>j.id);
+        fin = true;
+        if(modoDetalle){ log.push(`  → Fin: las canicas restantes son de un único color (o ninguna).`); }
+        break;
+      }
+    }
+
+    if(jugadores.length===0){ winners=[]; fin=true; if(modoDetalle){ log.push(`  → Fin: no quedan jugadores.`);} break; }
+  }
+
+  return {
+    winners,
+    eliminadosPorRonda,
+    rondas: ronda,
+    detalle: log.join("\n"),
+    supervivientes: new Set(winners).size
+  };
+}
+
+/* =================== simulación paso a paso (para el stepper) =================== */
+function simularPartidaPasos(params){
+  // Igual que la simulación anterior pero guardando "pasos" ricos en datos para UI ronda a ronda
+  const { nJug, nCol, maxInicio, canicasPorColor, estrategia, criterioColor } = params;
+  let jugadores = crearJugadores(nJug, nCol, maxInicio, canicasPorColor);
+  const pasos = [];
+  let winners=[];
+  let fin=false; let ronda=0;
+
+  while(!fin){
+    ronda++;
+    const N = jugadores.length;
+    const T = totalCanicasJugadores(jugadores);
+    const D = randInt(1,6);
+    const sizes = seleccionarEquipos(estrategia, D, N, T);
+
+    const indices = [...Array(N).keys()];
+    for(let i=indices.length-1;i>0;i--){ const j=randInt(0,i); [indices[i],indices[j]]=[indices[j],indices[i]]; }
+    const S = sum(sizes);
+    const idsSuperv = new Set(indices.slice(0, S).map(ix=>jugadores[ix].id));
+    const sup = jugadores.filter(j=>idsSuperv.has(j.id)).map(j=>clone(j));
+    const elim = jugadores.filter(j=>!idsSuperv.has(j.id)).map(j=>clone(j));
+
+    let pos=0; const equipos=[];
+    const aportesPorJugador = new Map();
+    for(const k of sizes){
+      const ap = aportaciones(D,k);
+      const miembros=[];
+      for(let t=0;t<k;t++){
+        const j = jugadores[indices[pos++]];
+        aportesPorJugador.set(j.id, ap[t]);
+        miembros.push({id:j.id, aporta:ap[t]});
+      }
+      equipos.push({dado:D, miembros, suma:D});
+    }
+
+    const paso = {
+      ronda, dado:D, equipos:clone(equipos),
+      eliminadosAntes: [], // antes de desaparecer, tras posibles cesiones (greedy)
+      colorEliminado:-1, canicasColorEliminado:0,
+      eliminadosCount:0, supervivientesDespues:[], fin:false, winners:[]
+    };
+
+    if(equipos.length===0){
+      if(criterioColor==="none"){
+        if(jugadores.length>0){
+          const totales = jugadores.map(j=>({id:j.id, t:totalCanicasJugador(j)}));
+          const maxT = Math.max(...totales.map(x=>x.t));
+          winners = totales.filter(x=>x.t===maxT).map(x=>x.id);
+        }else winners=[];
+      }else winners=[];
+      paso.eliminadosCount = N;
+      paso.fin=true; paso.winners=clone(winners);
+      pasos.push(paso); break;
+    }
+
+    if(estrategia==="greedy"){
+      // Tomar faltantes de eliminados
+      for(const sj of sup){
+        const aporte = aportesPorJugador.get(sj.id)||1;
+        const tiene = totalCanicasJugador(sj);
+        const faltan = Math.max(0, aporte - tiene);
+        if(faltan>0){
+          const extra = tomarDesdeEliminados(elim, nCol, faltan);
+          for(let c=0;c<nCol;c++) sj.colores[c]+=extra[c];
+        }
+      }
+      // Registrar eliminados con su estado final antes de desaparecer
+      paso.eliminadosAntes = elim.map(e=>{
+        return { id:e.id, total: totalCanicasJugador(e), colores: clone(e.colores) };
+      });
+      paso.eliminadosCount = elim.length;
+
+      // Supervivientes pasan a la siguiente fase
+      jugadores = sup;
+
+      if(criterioColor!=="none"){
+        const cntSup = conteoColores(jugadores);
+        const colorElim = elegirColorEliminar(cntSup, criterioColor);
+        paso.colorEliminado = colorElim;
+        if(colorElim>=0){
+          for(const j of jugadores){ paso.canicasColorEliminado += j.colores[colorElim]; j.colores[colorElim]=0; }
+        }
+        const trasCnt = conteoColores(jugadores);
+        if(hayUnSoloColor(trasCnt)){
+          winners = jugadores.map(j=>j.id);
+          paso.fin=true; paso.winners=clone(winners);
+          paso.supervivientesDespues = jugadores.map(j=>j.id);
+          pasos.push(paso); break;
+        }
+      }
+      paso.supervivientesDespues = jugadores.map(j=>j.id);
+      pasos.push(paso);
+      if(jugadores.length===0){ paso.fin=true; pasos[pasos.length-1]=paso; winners=[]; break; }
+      continue;
+    }
+
+    // No-greedy: usar asignación por objetivos
+    const sumaAportes = Array.from(aportesPorJugador.values()).reduce((a,b)=>a+b,0);
+    let remanente = Math.max(0, totalCanicasJugadores(jugadores) - sumaAportes);
+    let pool = conteoColores(jugadores);
+    const objetivo = new Map();
+    for(const j of sup){ objetivo.set(j.id, Math.max(1, aportesPorJugador.get(j.id) || 1)); }
+    for(const j of elim){ objetivo.set(j.id, 0); }
+    if(remanente>0){
+      if(estrategia==="ale"){
+        const vivos = sup.map(j=>j.id);
+        const noVivos = elim.map(j=>j.id);
+        while(remanente>0){
+          const targetPool = (RNG()<0.8 || noVivos.length===0) ? vivos : noVivos;
+          if(targetPool.length===0) break;
+          const id = choice(targetPool);
+          objetivo.set(id, (objetivo.get(id)||0)+1);
+          remanente--;
+        }
+      }else{
+        const vivos = sup.map(j=>j.id);
+        let i=0;
+        while(remanente>0 && vivos.length>0){
+          const id = vivos[i%vivos.length];
+          objetivo.set(id, (objetivo.get(id)||0)+1);
+          remanente--; i++;
+        }
+      }
+    }
+    const ordenIds = jugadores.map(j=>j.id);
+    const asignacion = asignarColoresSegunObjetivo(objetivo, pool, ordenIds);
+
+    paso.eliminadosAntes = elim.map(e=>{
+      const cols = asignacion.get(e.id)||Array(nCol).fill(0);
+      return { id:e.id, total: sum(cols), colores: cols };
+    });
+    paso.eliminadosCount = elim.length;
+
+    // Avanzar supervivientes
+    jugadores = jugadores.map(j=>{
+      if(idsSuperv.has(j.id)){ const n = clone(j); n.colores = asignacion.get(j.id)||Array(nCol).fill(0); return n; }
+      return null;
+    }).filter(Boolean);
+
+    if(criterioColor!=="none"){
+      const cntSup = conteoColores(jugadores);
+      const colorElim = elegirColorEliminar(cntSup, criterioColor);
+      paso.colorEliminado = colorElim;
+      if(colorElim>=0){
+        for(const j of jugadores){ paso.canicasColorEliminado += j.colores[colorElim]; j.colores[colorElim]=0; }
+      }
+      const trasCnt = conteoColores(jugadores);
+      if(hayUnSoloColor(trasCnt)){
+        winners = jugadores.map(j=>j.id);
+        paso.fin=true; paso.winners=clone(winners);
+        paso.supervivientesDespues = jugadores.map(j=>j.id);
+        pasos.push(paso); break;
+      }
+    }
+    paso.supervivientesDespues = jugadores.map(j=>j.id);
+    pasos.push(paso);
+    if(jugadores.length===0){ paso.fin=true; winners=[]; pasos[pasos.length-1]=paso; break; }
+  }
+
+  if(pasos.length>0 && pasos[pasos.length-1].fin){ /* ok */ }
+  return { pasos, winners };
+}
+
+/* =================== simulación múltiple =================== */
+function simularN(params, N){
+  const hist = new Map();
+  const elimPorIdx = []; const cuentaPorIdx = [];
+  let sumElimTotal = 0, sumRondas = 0;
+
+  for(let i=0;i<N;i++){
+    const out = simularPartida(params, false);
+    const s = out.supervivientes;
+    hist.set(s, (hist.get(s)||0)+1);
+    out.eliminadosPorRonda.forEach((v,ix)=>{
+      elimPorIdx[ix] = (elimPorIdx[ix]||0)+v;
+      cuentaPorIdx[ix] = (cuentaPorIdx[ix]||0)+1;
+    });
+    sumElimTotal += out.eliminadosPorRonda.reduce((a,b)=>a+b,0);
+    sumRondas += out.eliminadosPorRonda.length;
+  }
+
+  const maxJug = params.nJug;
+  const histArray = Array(maxJug+1).fill(0);
+  for(const [k,v] of hist.entries()){ if(k>=0 && k<=maxJug) histArray[k]=v; }
+
+  const avgElimPorRonda = elimPorIdx.map((sum,ix)=> sum/(cuentaPorIdx[ix]||1));
+  const avgElimGlobal = sumElimTotal / (sumRondas||1);
+
+  return { histArray, avgElimPorRonda, avgElimGlobal };
+}
+
+/* =================== UI y gráficas =================== */
+const ctxHist = document.getElementById('chartHist').getContext('2d');
+const ctxElim = document.getElementById('chartAvgElim').getContext('2d');
+let chartHist=null, chartElim=null;
+
+function getParams(){
+  const nJug = +document.getElementById('inpJugadores').value;
+  const nCol = +document.getElementById('inpColores').value;
+  const canicasPorColor = +document.getElementById('inpCanicasPorColor').value;
+  const maxInicio = +document.getElementById('inpMaxInicio').value;
+  const estrategia = document.getElementById('selEstrategia').value;
+  const criterioColor = document.getElementById('selColor').value;
+  const seed = document.getElementById('inpSeed').value.trim();
+  setSeed(seed===""? NaN : Number(seed));
+  return { nJug, nCol, canicasPorColor, maxInicio, estrategia, criterioColor };
+}
+function renderTablaColores(n){
+  const pal = palette(n);
+  const t = document.getElementById('tablaColores');
+  t.innerHTML = `<tr><th>Color</th><th>Etiqueta</th></tr>` +
+    pal.map((c,i)=> `<tr><td><span class="pill" style="background:${c}"></span></td><td>C${i+1} (${c})</td></tr>`).join("");
+}
+function drawHist(histArray){
+  const labels = histArray.map((_,i)=>i);
+  if(chartHist) chartHist.destroy();
+  chartHist = new Chart(ctxHist, {
+    type:'bar',
+    data:{ labels,
+      datasets:[{ label:'Frecuencia', data:histArray, backgroundColor:'#2f81f7aa', borderColor:'#2f81f7', borderWidth:1 }]
+    },
+    options:{
+      responsive:true,
+      scales:{ x:{ title:{display:true, text:'Supervivientes al final'} }, y:{ title:{display:true, text:'Frecuencia'}, beginAtZero:true } },
+      plugins:{ legend:{display:false}, tooltip:{mode:'index', intersect:false} }
+    }
+  });
+  const total = histArray.reduce((a,b)=>a+b,0);
+  let media=0, mediana=0, moda=0, maxF=0;
+  const valores=[];
+  histArray.forEach((f,sv)=>{ if(f>0){ media += sv*(f/total); valores.push(...Array(f).fill(sv)); } if(f>maxF){ maxF=f; moda=sv; }});
+  if(valores.length>0){ valores.sort((a,b)=>a-b); const mid=Math.floor(valores.length/2); mediana = valores.length%2? valores[mid] : (valores[mid-1]+valores[mid])/2; }
+  document.getElementById('kpisHist').innerHTML =
+    `<div class="kpi"><h4>Simulaciones</h4><div class="v">${total}</div></div>
+     <div class="kpi"><h4>Media supervivientes</h4><div class="v">${media.toFixed(2)}</div></div>
+     <div class="kpi"><h4>Mediana</h4><div class="v">${mediana}</div></div>
+     <div class="kpi"><h4>Moda</h4><div class="v">${moda}</div></div>`;
+}
+function drawElim(avgArr, avgGlobal){
+  const labels = avgArr.map((_,i)=>`Ronda ${i+1}`);
+  if(chartElim) chartElim.destroy();
+  chartElim = new Chart(ctxElim, {
+    type:'line',
+    data:{ labels,
+      datasets:[{ label:'Eliminados promedio por ronda', data:avgArr, borderColor:'#f85149', backgroundColor:'#f85149aa', tension:.2, fill:false }]
+    },
+    options:{
+      responsive:true,
+      scales:{ x:{ title:{display:true, text:'Ronda'} }, y:{ title:{display:true, text:'Eliminados promedio'}, beginAtZero:true } },
+      plugins:{ legend:{display:false}, tooltip:{mode:'index', intersect:false} }
+    }
+  });
+  document.getElementById('kpisElim').innerHTML =
+    `<div class="kpi"><h4>Rondas (máx. observada)</h4><div class="v">${avgArr.length}</div></div>
+     <div class="kpi"><h4>Eliminados promedio (global)</h4><div class="v">${avgGlobal.toFixed(2)}</div></div>`;
+}
+
+/* ======= Stepper: navegación ronda a ronda ======= */
+let stepData = null; let stepIdx = -1; let timer=null;
+function renderPaso(){
+  const cont = document.getElementById('rondaView');
+  const lblPaso = document.getElementById('lblPaso');
+  const lblEstado = document.getElementById('lblEstado');
+  if(!stepData){ cont.innerHTML = `<div class="small">Sin partida cargada. Pulsa “Jugar 1 partida (detallada)”.</div>`; lblPaso.textContent='Ronda –'; lblEstado.textContent=''; return;}
+  const pasos = stepData.pasos;
+  if(stepIdx<0) stepIdx=0; if(stepIdx>=pasos.length) stepIdx=pasos.length-1;
+  const p = pasos[stepIdx];
+  lblPaso.textContent = `Ronda ${p.ronda} (dado=${p.dado})`;
+  lblEstado.innerHTML = p.fin
+    ? `<span class="badge ${p.winners.length?'ok':'danger'}">${p.winners.length? 'Ganadores: '+p.winners.map(id=>'J'+id).join(', ') : 'Sin ganadores'}</span>`
+    : '';
+
+  // Equipos
+  const equiposHTML = p.equipos.map((eq,idx)=>{
+    const miembros = eq.miembros.map(m=>`J${m.id}=${m.aporta}`).join(", ");
+    return `<div>· <b>E${idx+1}</b> (suma=${eq.suma}): ${miembros}</div>`;
+  }).join("");
+
+  // Eliminados
+  const elimHTML = p.eliminadosAntes.length>0
+    ? p.eliminadosAntes.map(e=>{
+        const cols = e.colores.map((v,i)=> v>0? `C${i+1}:${v}`:null).filter(Boolean).join(" ");
+        return `<div>· J${e.id} — total=${e.total}${cols? ' ['+cols+']':''}</div>`;
+      }).join("")
+    : `<div>—</div>`;
+
+  // Color eliminado
+  const colInfo = p.colorEliminado>=0
+    ? `C${p.colorEliminado+1} (quitadas ${p.canicasColorEliminado})`
+    : (p.colorEliminado===-1? '—' : '—');
+
+  cont.innerHTML = `
+    <div class="grid2">
+      <div>
+        <h3>Equipos (${p.equipos.length})</h3>
+        ${equiposHTML || '<div>—</div>'}
+      </div>
+      <div>
+        <h3>Eliminados en la ronda (${p.eliminadosCount})</h3>
+        ${elimHTML}
+      </div>
+    </div>
+    <div style="margin-top:8px;">
+      <h3>Color eliminado</h3>
+      <div>${colInfo}</div>
+    </div>
+    <div style="margin-top:8px;" class="small">
+      Supervivientes tras la ronda: ${p.supervivientesDespues.length>0 ? p.supervivientesDespues.map(id=>'J'+id).join(', ') : '—'}
+    </div>
+  `;
+}
+
+document.getElementById('btnPrev').addEventListener('click', ()=>{
+  if(!stepData) return; stepIdx=Math.max(0, stepIdx-1); renderPaso();
+});
+document.getElementById('btnNext').addEventListener('click', ()=>{
+  if(!stepData) return; stepIdx=Math.min(stepData.pasos.length-1, stepIdx+1); renderPaso();
+});
+document.getElementById('btnAuto').addEventListener('click', (ev)=>{
+  if(!stepData) return;
+  if(timer){ clearInterval(timer); timer=null; ev.target.textContent='Autoplay ▶'; return; }
+  ev.target.textContent='Pausar ⏸';
+  timer=setInterval(()=>{
+    if(!stepData) { clearInterval(timer); timer=null; return; }
+    if(stepIdx>=stepData.pasos.length-1){ clearInterval(timer); timer=null; document.getElementById('btnAuto').textContent='Autoplay ▶'; return; }
+    stepIdx++; renderPaso();
+  }, 1000);
+});
+
+/* =================== eventos principales =================== */
+document.getElementById('btnSimular').addEventListener('click', ()=>{
+  const p = getParams();
+  renderTablaColores(p.nCol);
+  const n = +document.getElementById('inpSimulaciones').value;
+  const { histArray, avgElimPorRonda, avgElimGlobal } = simularN(p, n);
+  drawHist(histArray);
+  drawElim(avgElimPorRonda, avgElimGlobal);
+});
+
+document.getElementById('btnPartida').addEventListener('click', ()=>{
+  const p = getParams();
+  renderTablaColores(p.nCol);
+
+  // Paso a paso (para el stepper)
+  stepData = simularPartidaPasos(p);
+  stepIdx = 0;
+  renderPaso();
+
+  // Log textual completo
+  const out = simularPartida(p, true);
+  const log = document.getElementById('log');
+  const gan = out.winners;
+  const badge = gan.length>0
+    ? `<span class="badge ok">Ganadores: ${gan.map(id=>`J${id}`).join(", ")}</span>`
+    : `<span class="badge danger">No hay ganadores</span>`;
+  const resumen = `\nResultado — Rondas: ${out.rondas} | ${gan.length>0? 'Ganadores: '+gan.map(id=>'J'+id).join(', ') : 'Sin ganadores'}\n` +
+    `Eliminados por ronda: [${out.eliminadosPorRonda.join(", ")}]`;
+  log.innerHTML = (out.detalle + "\n" + resumen + "\n")
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;'); // safe
+});
+
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  if(chartHist){ chartHist.destroy(); chartHist=null; }
+  if(chartElim){ chartElim.destroy(); chartElim=null; }
+  document.getElementById('kpisHist').innerHTML="";
+  document.getElementById('kpisElim').innerHTML="";
+  document.getElementById('log').textContent="";
+  stepData=null; stepIdx=-1; renderPaso();
+});
+
+/* inicial */
+renderTablaColores(+document.getElementById('inpColores').value);
+</script>
+</body>
+</html>

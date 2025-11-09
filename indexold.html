@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simulación: La mesa se vacía — Canicas</title>
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;max-width:980px;margin:28px auto;padding:18px;color:#111}
+    h1{font-size:20px;margin:0 0 6px}
+    p.small{font-size:13px;color:#444}
+    label{display:block;margin-top:10px;font-weight:600}
+    input, select, button{font-size:14px;padding:6px 8px;margin-top:6px}
+    .controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .log{max-height:260px;overflow:auto;border:1px solid #eee;padding:8px;background:#fbfbfb;margin-top:12px}
+    pre{background:#f7f7f8;padding:8px;border-radius:6px}
+  </style>
+</head>
+<body>
+<h1>Simulación — "La mesa se vacía"</h1>
+<p class="small">Esta versión aplica las nuevas reglas: en la **primera ronda no se elimina color**, la eliminación de color ocurre **después** de cerrar la ronda, y el número máximo de rondas por defecto es **6**. Además, ahora se puede elegir el **número de colores inicial**.</p>
+
+<div class="controls">
+  <div>
+    <label>Número de jugadores (N)</label>
+    <input id="numPlayers" type="number" value="12" min="2" max="200">
+
+    <label>Número de colores</label>
+    <input id="numColors" type="number" value="6" min="1" max="12">
+
+    <label>Canicas por color</label>
+    <input id="perColor" type="number" value="14" min="1" max="200">
+
+    <label>Máx canicas iniciales (0-3 recomendado)</label>
+    <input id="maxInitial" type="number" value="3" min="0" max="10">
+  </div>
+
+  <div>
+    <label>Rondas máximas (máx = número de colores)</label>
+    <input id="maxRounds" type="number" value="6" min="1" max="12">
+
+    <label>Simulaciones</label>
+    <input id="runs" type="number" value="200" min="1" max="2000">
+
+    <label>Estrategia</label>
+    <select id="strategy">
+      <option value="greedy">Greedy</option>
+      <option value="greedy-size">Greedy: equipos pequeños</option>
+      <option value="random">Aleatorio</option>
+    </select>
+
+    <label>Mostrar log</label>
+    <select id="showLog">
+      <option value="none">Ninguno</option>
+      <option value="one">Una partida ejemplo</option>
+    </select>
+  </div>
+
+  <div>
+    <label>&nbsp;</label>
+    <button id="runBtn">Ejecutar</button>
+    <button id="exportBtn">Descargar CSV</button>
+    <div style="margin-top:12px"><span id="status">Listo</span></div>
+  </div>
+</div>
+
+<h3>Resumen</h3>
+<div id="summary"></div>
+
+<h3>Histograma supervivientes</h3>
+<div id="hist"></div>
+
+<h3>Log</h3>
+<div class="log" id="logbox"></div>
+
+<script>
+function randInt(n){ return Math.floor(Math.random()*n); }
+function rollDie(){ return randInt(6)+1; }
+
+function initialDeal(N, numColors, perColor, maxInitial){
+  const stock = Array(numColors).fill(perColor);
+  const players = [];
+  for(let i=0;i<N;i++){
+    const take = randInt(maxInitial+1);
+    const h = Array(numColors).fill(0);
+    for(let t=0;t<take;t++){
+      const choices = stock.map((v,i)=>v>0?i:null).filter(v=>v!==null);
+      if(choices.length===0) break;
+      const c = choices[randInt(choices.length)];
+      h[c]++; stock[c]--;
+    }
+    players.push({id:i, holdings:h});
+  }
+  return players;
+}
+
+function total(p){ return p.holdings.reduce((a,b)=>a+b,0); }
+
+function formTeams(players, T, numColors, strategy){
+  const pool = players.map(p=>({id:p.id, holdings:p.holdings.slice(), total:total(p), alive:true}));
+  const included = new Set();
+  const teams=[];
+
+  // singles
+  const singles = pool.filter(p=>p.total>=T).sort((a,b)=>a.total-b.total);
+  for(const s of singles){ if(!included.has(s.id)){ let need=T; for(let c=0;c<numColors && need>0;c++){ const g=Math.min(s.holdings[c],need); s.holdings[c]-=g; s.total-=g; need-=g; } included.add(s.id); teams.push({members:[s.id]}); }}
+
+  function candidates(){
+    const arr = pool.filter(p=>!included.has(p.id) && p.total>0);
+    if(strategy==='greedy-size') return arr.sort((a,b)=>a.total-b.total);
+    return arr.sort((a,b)=>b.total-a.total);
+  }
+
+  while(true){
+    const cand=candidates(); if(cand.length===0) break;
+    let formed=false;
+    for(let size=2; size<=Math.min(5,cand.length); size++){
+      for(let tries=0; tries<200; tries++){
+        const subset=cand.slice().sort(()=>Math.random()-0.5).slice(0,size);
+        let sum=0; subset.forEach(x=>sum+=x.total);
+        if(sum>=T){ let need=T; for(const m of subset){ for(let c=0;c<numColors && need>0;c++){ const g=Math.min(m.holdings[c],need); m.holdings[c]-=g; m.total-=g; need-=g; } } subset.forEach(m=>included.add(m.id)); teams.push({members:subset.map(m=>m.id)}); formed=true; break; }
+      }
+      if(formed) break;
+    }
+    if(!formed) break;
+  }
+
+  return included;
+}
+
+function runGame(N, numColors, perColor, maxInitial, maxRounds, strategy, log){
+  let players = initialDeal(N,numColors,perColor,maxInitial);
+  const eliminatedColors = new Set();
+  let logText="";
+  function L(t){ if(log){ logText+=t+"\n"; } }
+
+  let round=1;
+  while(round<=maxRounds && players.length>0){
+    L(`-- Ronda ${round} --`);
+
+    // Color elimination happens only if round>1
+    if(round>1){
+      // pick random remaining color
+      const remainingColors=[...Array(numColors).keys()].filter(c=>!eliminatedColors.has(c));
+      if(remainingColors.length>0){
+        const color = remainingColors[randInt(remainingColors.length)];
+        eliminatedColors.add(color);
+        L(`Se elimina color ${color+1}`);
+        for(const p of players){ p.holdings[color]=0; }
+      }
+    }
+
+    const T = rollDie();
+    L(`Objetivo T=${T}`);
+
+    const included = formTeams(players,T,numColors,strategy);
+    const survivors = players.filter(p=>included.has(p.id));
+    const eliminated = players.filter(p=>!included.has(p.id));
+    L(`Eliminados: ${eliminated.length}`);
+
+    if(eliminated.length===0) return {survivors:players.map(p=>p.id),rounds:round,endedBy:"no_elimination", log:logText};
+
+    players = survivors;
+    round++;
+  }
+  return {survivors:players.map(p=>p.id),rounds:Math.min(round-1,maxRounds),endedBy:"round_limit",log:logText};
+}
+
+function runBatch(){
+  const N=+numPlayers.value;
+  const numC=+numColors.value;
+  const perC=+perColor.value;
+  const maxI=+maxInitial.value;
+  const maxR=Math.min(+maxRounds.value,numC);
+  const r=+runs.value;
+  const strat=strategy.value;
+  const show=showLog.value;
+
+  let logs=null;
+  const results=[];
+  for(let i=0;i<r;i++){
+    const res=runGame(N,numC,perC,maxI,maxR,strat, show==='one' && logs===null);
+    if(show==='one' && logs===null) logs=res.log;
+    results.push(res);
+  }
+
+  const surv = results.map(x=>x.survivors.length);
+  const avg = surv.reduce((a,b)=>a+b,0)/surv.length;
+  summary.innerHTML = `Media supervivientes: ${avg.toFixed(2)}<br>Rondas medias: ${(results.map(x=>x.rounds).reduce((a,b)=>a+b,0)/r).toFixed(2)}`;
+
+  const count={}; surv.forEach(s=>count[s]=(count[s]||0)+1);
+  hist.innerHTML = `<pre>${Object.entries(count).map(([k,v])=>`${k}: ${v}`).join("\n")}</pre>`;
+  logbox.innerHTML = logs ? `<pre>${logs}</pre>` : "";
+}
+
+runBtn.onclick=runBatch;
+exportBtn.onclick=()=>alert("Export CSV se mantiene igual: se puede añadir si lo deseas.");
+</script>
+</body>
+</html>
